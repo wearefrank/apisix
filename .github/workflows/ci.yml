@@ -1,0 +1,70 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches: [master, 'release/**']
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+  pull_request:
+    branches: [master, 'release/**']
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/master' && github.run_number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  version-next:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version-next: ${{ steps.reference.outputs.next-reference || steps.semantic-release.outputs.release-version }}
+      version-next-strict: ${{ steps.reference.outputs.next-reference }}
+      version-next-tag: ${{ steps.semantic-release.outputs.release-tag }}
+      version-next-type: ${{ steps.semantic-release.outputs.release-type }}
+    steps:
+      - uses: step-security/harden-runner@95d9a5deda9de15063e7595e9719c11c38c90ae2 # v2.13.2
+        with:
+          disable-sudo: true
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+
+      - name: Checkout
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 #6.0.0
+
+      - name: Next Reference
+        if: ${{ github.event_name == 'pull_request' }}
+        id: reference
+        uses: wearefrank/ci-cd-templates/next-reference@5cc3ad4df08fbbf281fd330b440834815a69e568 #2.1.1
+
+      - name: Analyze Commits
+        if: ${{ github.event_name == 'push' }}
+        id: semantic-release
+        run: npx semantic-release --dry-run -p "@semantic-release/commit-analyzer"
+        
+  ci:
+    uses: wearefrank/ci-cd-templates/.github/workflows/docker-bake-and-push.yml@docker-bake-and-push-workflow
+    needs:
+      - version-next
+    strategy:
+      fail-fast: true
+      matrix:
+        target:
+          - ubuntu
+          - debian
+          - debian-dev
+    secrets:
+      token: ${{ secrets.GITHUB_TOKEN }}
+    with:
+      version: ${{ needs.version-next.outputs.version-next }}
+      image-name: 'frankgateway-staging'
+      latest-tag: true
+      bake-target: ${{ matrix.target }}
+      meta-flavor: |
+        ${{ matrix.target != 'ubuntu' && format('suffix={0}', matrix.target) || '' }}
+
