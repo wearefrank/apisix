@@ -41,9 +41,6 @@ RUN set -x \
 
 FROM debian:bullseye-slim
 
-ARG ENTRYPOINT_PATH=./docker-entrypoint.sh
-ARG INSTALL_BROTLI=./install-brotli.sh
-
 # Install the runtime libyaml package
 RUN apt-get -y update --fix-missing \
     && apt-get install -y libldap2-dev libyaml-0-2 \
@@ -53,9 +50,8 @@ RUN apt-get -y update --fix-missing \
 COPY --from=build /usr/local/apisix /usr/local/apisix
 COPY --from=build /usr/local/openresty /usr/local/openresty
 COPY --from=build /usr/bin/apisix /usr/bin/apisix
-COPY --chown=nobody:root ui/ /usr/local/apisix/ui/
 
-COPY ${INSTALL_BROTLI} /install-brotli.sh
+COPY ./docker/install-brotli.sh /install-brotli.sh
 RUN chmod +x /install-brotli.sh \
     && cd / && ./install-brotli.sh && rm -rf /install-brotli.sh \
     && chgrp -R 0 /usr/local/apisix \
@@ -70,7 +66,7 @@ RUN ln -sf /dev/stdout /usr/local/apisix/logs/access.log \
 
 EXPOSE 9080 9443
 
-COPY ${ENTRYPOINT_PATH} /docker-entrypoint.sh
+COPY ./docker/docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
